@@ -1,0 +1,568 @@
+---
+title: "Exam_SocCult_R"
+author: "Julie Svinth Nielsen"
+date: "28/4/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Loading the packages
+```{r}
+library(pacman)
+pacman::p_load(tidyverse,
+               lme4,
+               ggplot2,
+               brms,
+               viridis,
+               metafor,
+               bayesplot,
+               rethinking,
+               brms
+               )
+```
+
+Load in data
+```{r}
+
+
+d <- read_csv("~/Uni stuff/Computational Modeling/SocCult exam/Træningsadfærd før og under lockdown (svar) - Formularsvar 1.csv")
+
+# Removing rows with different questions
+d <- d[-c(1,2,3,4,5,6), ]
+```
+
+Clean data
+```{r}
+# Creating ID coloumn
+d$ID <- seq.int(nrow(d))
+
+
+# Removing unnecessary columns
+d$zz <- NULL
+d$xx <- NULL
+d$yy <- NULL
+
+# Remove characters from columns
+d$time_pre <- gsub("[[:alpha:]]", "", as.factor(d$time_pre))
+d$time_lock <- gsub("[[:alpha:]]", "", as.factor(d$time_lock))
+
+
+# Creating numeric values to work with for time_pre
+d <- d %>% 
+  mutate(time_pre = str_replace_all(time_pre, pattern = "^ 1 $", "0.5")) %>%
+  mutate(time_pre = str_replace_all(time_pre, pattern = "1-2", "1.5")) %>% 
+  mutate(time_pre = str_replace_all(time_pre, pattern = "2-3", "2.5")) %>% 
+  mutate(time_pre = str_replace_all(time_pre, pattern = "3-4", "3.5")) %>% 
+  mutate(time_pre = str_replace_all(time_pre, pattern = "4-5", "4.5")) %>% 
+  mutate(time_pre = str_replace_all(time_pre, pattern = "^ 5 $", "5.5"))
+ 
+  
+
+
+# Creating numeric values to work with for time_lock
+d <- d %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "^ 1 $", "0.5")) %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "1-2", "1.5")) %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "2-3", "2.5")) %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "3-4", "3.5")) %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "4-5", "4.5")) %>% 
+  mutate(time_lock = str_replace_all(time_lock, pattern = "^ 5 $", "5.5"))
+  
+
+
+
+# change column types 
+d <- d %>% 
+  mutate(
+    Gender = as.factor(Gender),
+    exercise_pre = as.factor(exercise_pre),
+    time_pre = as.numeric(time_pre),
+    low_intens_pre = as.factor(low_intens_pre),
+    social_workout_pre = as.numeric(social_workout_pre),
+    days_exercise_lock = as.numeric(days_exercise_lock),
+    diff_exercise = as.factor(diff_exercise),
+    time_lock = as.numeric(time_lock),
+    low_intens_lock = as.factor(low_intens_lock),
+    social_workout_lock = as.numeric(social_workout_lock),
+    motivation_diff = as.factor(motivation_diff),
+    social_circle_exercise = as.factor(social_circle_exercise),
+    moderate_intens_pre = as.factor(moderate_intens_pre),
+    high_intens_pre = as.factor(high_intens_pre),
+    moderate_intens_lock = as.factor(moderate_intens_lock),
+    high_intens_lock = as.factor(high_intens_lock)
+    
+  )
+
+
+
+
+```
+
+```{r}
+
+# Assessing the distributions of time_pre and time_lock
+hist(d$time_pre)
+hist(d$time_lock)
+
+
+
+```
+
+```{r}
+
+d <- d %>% 
+  filter(!is.na(low_intens_lock)) %>% 
+  filter(!is.na(moderate_intens_lock)) %>% 
+  filter(!is.na(high_intens_lock)) %>% 
+  filter(!is.na(low_intens_pre)) %>% 
+  filter(!is.na(moderate_intens_pre)) %>% 
+  filter(!is.na(high_intens_pre))
+
+
+d$time_pre <- as.integer(d$time_pre)
+d$time_lock <- as.integer(d$time_lock)
+
+
+d$time_pre <- factor(d$time_pre, levels=c(0, 1, 2, 3, 4, 5), ordered=TRUE)
+d$time_lock <- factor(d$time_lock, levels=c(0, 1, 2, 3, 4, 5), ordered=TRUE)
+d$social_workout_lock <- factor(d$social_workout_lock, levels=c(0, 1, 2, 3, 4), ordered=TRUE)
+d$social_workout_pre <- factor(d$social_workout_pre, levels=c(0, 1, 2, 3, 4), ordered=TRUE)
+
+
+
+# Create a variable-width Box Plot with log y-axis & horizontal labels
+boxplot(time_lock ~ time_pre, data = d,
+        varwidth = TRUE, log = "y", las = 1)
+
+# low intensity proportion before covid-19
+ggplot(d, aes(time_pre, fill = low_intens_pre)) +
+  geom_bar(width = 0.3)
+
+# low intensity proportion during lockdown
+ggplot(d, aes(time_lock, fill = low_intens_lock)) +
+  geom_bar(width = 0.3)
+
+# moderate intensity proportion before covid-19
+ggplot(d, aes(time_pre, fill = moderate_intens_pre)) +
+  geom_bar(width = 0.3)
+
+# moderate intensity proportion during lockdown
+ggplot(d, aes(time_lock, fill = moderate_intens_lock)) +
+  geom_bar(width = 0.3)
+
+# high intensity proportion before covid 19
+ggplot(d, aes(time_pre, fill = high_intens_pre)) +
+  geom_bar(width = 0.3)
+
+# high intensity proprtion during lockdown
+ggplot(d, aes(time_lock, fill = high_intens_lock)) +
+geom_bar(width = 0.3)
+ 
+
+
+```
+
+
+Define formula
+
+```{r}
+
+
+df <- na.omit(d[,c("time_lock", "time_pre","social_workout_lock", "social_workout_pre", "social_circle_exercise", "Gender", "Age")])
+
+mean(df$Age)
+sd(df$Age)
+summary(df$Gender)
+
+m1_f <- bf(time_lock~1)
+
+
+
+# Get priors
+
+get_prior(m1_f, family = cumulative(link=logit), data = df)
+
+
+
+f1_prior <- c(
+  prior(normal(0, 1), class = Intercept),
+  prior(normal(0, 1), class = Intercept, coef = 1),
+  prior(normal(0, 1), class = Intercept, coef = 2),
+  prior(normal(0, 1), class = Intercept, coef = 3),
+  prior(normal(0, 1), class = Intercept, coef = 4),
+  prior(normal(0, 1), class = Intercept, coef = 5)
+  
+)
+
+
+# Prior Predictive Check (and adjustments)
+m1_priorCheck <- brm(
+  m1_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f1_prior,
+  sample_prior = "only",
+  chains = 2,
+  cores = 2,
+  file = "m1_priorCheck",
+  file_refit = "on_change"
+)
+
+pp_check(m1_priorCheck, nsamples = 100)
+
+# Model fitting
+m1 <- brm(
+  m1_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f1_prior,
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = "m1",
+  file_refit = "on_change"
+)
+
+# Divergence check
+
+# Posterior predictive checks
+pp_check(m1_priorCheck, nsamples = 100)
+pp_check(m1, nsamples = 100)
+
+
+# Summary
+summary(m1) 
+
+
+```
+
+
+
+```{r}
+
+# make formula
+m2_f <- bf(time_lock~1+mo(time_pre))
+
+
+# get prior
+get_prior(m2_f, family = cumulative(link = logit), data = df)
+
+
+
+
+# setting the priors
+f2_prior <- c(
+  prior(normal(0,1), class = Intercept),
+  prior(normal(0,1), class = Intercept, coef = 1),
+  prior(normal(0,1), class = Intercept, coef = 2),
+  prior(normal(0,1), class = Intercept, coef = 3),
+  prior(normal(0,1), class = Intercept, coef = 4),
+  prior(normal(0,1), class = Intercept, coef = 5),
+  prior(normal(0,0.2), class = b, coef = motime_pre),
+  prior(dirichlet(1, 1, 1, 1, 1), class = "simo", coef = "motime_pre1")
+  
+)
+
+
+
+# Illustrate outcome variable 
+dens <- density(d$time_lock)
+plot(dens)
+
+
+
+
+
+# Prior Predictive Check (and adjustments)
+m2_priorCheck <- brm(
+  m2_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f2_prior,
+  sample_prior = "only",
+  chains = 2,
+  cores = 2,
+  file = "m2_priorCheck",
+  file_refit = "on_change"
+)
+
+
+pp_check(m2_priorCheck, nsamples = 100)
+
+# Model fitting
+m2 <- brm(
+  m2_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f2_prior,
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = "m2",
+  file_refit = "on_change"
+)
+
+# Divergence check
+
+# Posterior predictive checks
+pp_check(m2_priorCheck, nsamples = 100)
+pp_check(m2, nsamples = 100)
+
+# Summary
+summary(m2)
+
+
+
+posterior_m2 <- posterior_samples(m2)
+con_m2 <- conditional_effects(m2)
+
+
+
+```
+
+
+```{r}
+
+
+
+
+# Add LOOIC and WAIC scores
+m1 <- add_criterion(m1, criterion = c("loo", "waic"))
+m2 <- add_criterion(m2, criterion = c("loo", "waic"))
+
+loo_compare(m1, m2)
+
+
+loo(m1, m2)
+
+
+loo_model_weights(m1, m2) # m2 is best
+
+mcmc_plot(m1)
+mcmc_plot(m2)
+```
+Check and evaluate the models
+```{r}
+
+
+#Checking the chains 
+plot(m1) 
+plot(m2)
+
+
+#Plot of estimates
+
+mcmc_plot(m1)
+mcmc_plot(m2)
+
+# Hypothesis testing
+
+hypothesis(m2, "motime_pre > 0", class = "bsp")
+
+
+#Posterior update check
+plot(hypothesis(m2, "motime_pre > 0", class = "bsp"))
+
+
+
+# Plotting the conditional effects
+plot(conditional_effects(m2, categorical = T, 
+                         method="posterior_epred", 
+                         nsamples=100), 
+     points=T)
+
+
+```
+
+
+
+Next hypothesis
+
+```{r}
+
+
+
+df$social_workout_lock <- as.integer(df$social_workout_lock)
+df$social_workout_pre <- as.integer(df$social_workout_pre)
+
+# Making the formula for the simple model
+m3_f <- bf(social_workout_lock~1)
+
+
+
+# Get priors
+
+get_prior(m3_f, family = cumulative("logit"), data = df)
+summary(df$social_workout_lock)
+
+
+f3_prior <- c(
+  prior(normal(0, 1), class = Intercept, coef = 1),
+  prior(normal(0, 1), class = Intercept, coef = 2),
+  prior(normal(0, 1), class = Intercept, coef = 3),
+  prior(normal(0, 1), class = Intercept, coef = 4)
+)
+
+
+# Prior Predictive Check (and adjustments)
+m3_priorCheck <- brm(
+  m3_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f3_prior,
+  sample_prior = "only",
+  chains = 2,
+  cores = 2,
+  file = "m3_priorCheck",
+  file_refit = "on_change"
+)
+
+pp_check(m4_priorCheck, nsamples = 100)
+
+# Model fitting
+m3 <- brm(
+  m3_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f3_prior,
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = "m3",
+  file_refit = "on_change"
+)
+
+# Divergence check
+
+# Posterior predictive checks
+pp_check(m3_priorCheck, nsamples = 100)
+pp_check(m3, nsamples = 100)
+
+
+# Summary
+summary(m3) 
+
+
+
+
+
+
+```
+
+
+```{r}
+
+# making the formula for the full model
+m4_f <- bf(social_workout_lock~1+mo(social_workout_pre))
+
+
+# get prior
+get_prior(m4_f, family = cumulative("logit"), data = df)
+
+
+summary(df$social_workout_lock)
+
+# setting the priors
+f4_prior <- c(
+  prior(normal(0, 1), class = Intercept, coef = 1),
+  prior(normal(0, 1), class = Intercept, coef = 2),
+  prior(normal(0, 1), class = Intercept, coef = 3),
+  prior(normal(0, 1), class = Intercept, coef = 4),
+  prior(normal(0,0.2), class = b, coef = mosocial_workout_pre),
+  prior(dirichlet(1, 1, 1, 1), class = "simo", coef = "mosocial_workout_pre1")
+)
+
+
+
+# Illustrate outcome variable 
+dens <- density(df$social_workout_lock)
+plot(dens)
+
+
+
+# Prior Predictive Check (and adjustments)
+m4_priorCheck <- brm(
+  m4_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f4_prior,
+  sample_prior = "only",
+  chains = 2,
+  cores = 2,
+  file = "m4_priorCheck",
+  file_refit = "on_change"
+)
+
+pp_check(m4_priorCheck, nsamples = 100)
+
+# Model fitting
+m4 <- brm(
+  m4_f,
+  data = df,
+  family = cumulative("logit"),
+  prior = f4_prior,
+  sample_prior = T,
+  chains = 2,
+  cores = 2,
+  file = "m4",
+  file_refit = "on_change"
+)
+
+# Divergence check
+
+# Posterior predictive checks
+pp_check(m4_priorCheck, nsamples = 100)
+pp_check(m4, nsamples = 100)
+
+# Summary
+summary(m4)
+
+
+
+posterior_m4 <- posterior_samples(m4)
+con_m4 <- conditional_effects(m4)
+
+
+
+
+# Add LOOIC and WAIC scores
+m3 <- add_criterion(m3, criterion = c("loo", "waic"))
+m4 <- add_criterion(m4, criterion = c("loo", "waic"))
+
+loo_compare(m3, m4) # m4 is best
+
+loo_model_weights(m3, m4) # m4 is best
+
+```
+
+
+Check and evaluate the models
+```{r}
+
+
+#Checking the chains 
+plot(m3) 
+plot(m4)
+
+
+#Plot of estimates
+
+mcmc_plot(m3)
+mcmc_plot(m4)
+
+# Hypothesis testing
+hypothesis(m4, "mosocial_workout_pre > 0", class = "bsp")
+
+#Posterior update check
+plot(hypothesis(m4, "mosocial_workout_pre > 0", class = "bsp"))
+
+# Plotting the conditional effects
+plot(conditional_effects(m4, categorical = T, 
+                         method="posterior_epred", 
+                         nsamples=100), 
+     points=T)
+
+```
