@@ -28,7 +28,7 @@ Load in data
 ```{r}
 
 
-d <- read_csv("~/Uni stuff/Computational Modeling/SocCult exam/Træningsadfærd før og under lockdown (svar) - Formularsvar 1.csv")
+d <- read_csv("~/Uni stuff/Computational Modeling/SocCult/Træningsadfærd før og under lockdown (svar) - Formularsvar 1.csv")
 
 # Removing rows with different questions
 d <- d[-c(1,2,3,4,5,6), ]
@@ -213,6 +213,11 @@ m1_priorCheck <- brm(
 
 pp_check(m1_priorCheck, nsamples = 100)
 
+
+y_pred <- posterior_linpred(m1_priorCheck)
+dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
+
+
 # Model fitting
 m1 <- brm(
   m1_f,
@@ -231,6 +236,10 @@ m1 <- brm(
 # Posterior predictive checks
 pp_check(m1_priorCheck, nsamples = 100)
 pp_check(m1, nsamples = 100)
+
+
+y_pred <- posterior_linpred(m1)
+dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
 
 
 # Summary
@@ -292,6 +301,10 @@ m2_priorCheck <- brm(
 
 pp_check(m2_priorCheck, nsamples = 100)
 
+y_pred <- posterior_linpred(m2_priorCheck)
+dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
+
+
 # Model fitting
 m2 <- brm(
   m2_f,
@@ -315,11 +328,11 @@ pp_check(m2, nsamples = 100)
 summary(m2)
 
 
-
 posterior_m2 <- posterior_samples(m2)
 con_m2 <- conditional_effects(m2)
 
-
+# Inverse logit for the estimate of motime_pre 
+inv_logit(0.32)
 
 ```
 
@@ -361,6 +374,8 @@ mcmc_plot(m2)
 # Hypothesis testing
 
 hypothesis(m2, "motime_pre > 0", class = "bsp")
+
+inv_logit(0.32)
 
 
 #Posterior update check
@@ -420,7 +435,10 @@ m3_priorCheck <- brm(
   file_refit = "on_change"
 )
 
-pp_check(m4_priorCheck, nsamples = 100)
+pp_check(m3_priorCheck, nsamples = 100)
+
+
+
 
 # Model fitting
 m3 <- brm(
@@ -440,6 +458,7 @@ m3 <- brm(
 # Posterior predictive checks
 pp_check(m3_priorCheck, nsamples = 100)
 pp_check(m3, nsamples = 100)
+
 
 
 # Summary
@@ -522,6 +541,9 @@ summary(m4)
 
 
 
+# inv_logit of estimate for mosocial_workout_log
+inv_logit(0.26)
+
 posterior_m4 <- posterior_samples(m4)
 con_m4 <- conditional_effects(m4)
 
@@ -555,6 +577,8 @@ mcmc_plot(m4)
 
 # Hypothesis testing
 hypothesis(m4, "mosocial_workout_pre > 0", class = "bsp")
+
+inv_logit(0.26)
 
 #Posterior update check
 plot(hypothesis(m4, "mosocial_workout_pre > 0", class = "bsp"))
