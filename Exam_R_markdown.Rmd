@@ -113,6 +113,7 @@ hist(d$time_lock)
 
 ```{r}
 
+# Removing NAs
 d <- d %>% 
   filter(!is.na(low_intens_lock)) %>% 
   filter(!is.na(moderate_intens_lock)) %>% 
@@ -125,7 +126,7 @@ d <- d %>%
 d$time_pre <- as.integer(d$time_pre)
 d$time_lock <- as.integer(d$time_lock)
 
-
+# Creating the ordinal levels
 d$time_pre <- factor(d$time_pre, levels=c(0, 1, 2, 3, 4, 5), ordered=TRUE)
 d$time_lock <- factor(d$time_lock, levels=c(0, 1, 2, 3, 4, 5), ordered=TRUE)
 d$social_workout_lock <- factor(d$social_workout_lock, levels=c(0, 1, 2, 3, 4), ordered=TRUE)
@@ -170,13 +171,14 @@ Define formula
 
 ```{r}
 
-
-df <- na.omit(d[,c("time_lock", "time_pre","social_workout_lock", "social_workout_pre", "social_circle_exercise", "Gender", "Age")])
+# New df with relevant variables 
+df <- na.omit(d[,c("time_lock", "time_pre","social_workout_lock", "social_workout_pre", "social_circle_exercise", "Gender", "Age", "ID")])
 
 mean(df$Age)
 sd(df$Age)
 summary(df$Gender)
 
+# Defining the formula
 m1_f <- bf(time_lock~1)
 
 
@@ -186,7 +188,7 @@ m1_f <- bf(time_lock~1)
 get_prior(m1_f, family = cumulative(link=logit), data = df)
 
 
-
+# setting priors
 f1_prior <- c(
   prior(normal(0, 1), class = Intercept),
   prior(normal(0, 1), class = Intercept, coef = 1),
@@ -214,10 +216,6 @@ m1_priorCheck <- brm(
 pp_check(m1_priorCheck, nsamples = 100)
 
 
-y_pred <- posterior_linpred(m1_priorCheck)
-dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
-
-
 # Model fitting
 m1 <- brm(
   m1_f,
@@ -237,9 +235,6 @@ m1 <- brm(
 pp_check(m1_priorCheck, nsamples = 100)
 pp_check(m1, nsamples = 100)
 
-
-y_pred <- posterior_linpred(m1)
-dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
 
 
 # Summary
@@ -277,13 +272,6 @@ f2_prior <- c(
 
 
 
-# Illustrate outcome variable 
-dens <- density(d$time_lock)
-plot(dens)
-
-
-
-
 
 # Prior Predictive Check (and adjustments)
 m2_priorCheck <- brm(
@@ -301,8 +289,6 @@ m2_priorCheck <- brm(
 
 pp_check(m2_priorCheck, nsamples = 100)
 
-y_pred <- posterior_linpred(m2_priorCheck)
-dens(inv_logit(y_pred)) #densityplot that has been inverse logit-transformed
 
 
 # Model fitting
@@ -328,8 +314,15 @@ pp_check(m2, nsamples = 100)
 summary(m2)
 
 
-posterior_m2 <- posterior_samples(m2)
-con_m2 <- conditional_effects(m2)
+#extract the posteriors from the model: 
+
+post_p2 <- posterior_samples(m2)
+
+#How much have the posterior betas learned from data, compared to priors - density plots of prior vs posterior distributions
+
+ggplot(post_p2) + geom_density(aes(post_p2$'prior_b', fill = "prior_bsp_motime_pre")) + geom_density(aes(post_p2$'bsp_motime_pre', fill = "posterior")) + xlab("Parameter values")
+
+
 
 # Inverse logit for the estimate of motime_pre 
 inv_logit(0.32)
@@ -346,16 +339,17 @@ inv_logit(0.32)
 m1 <- add_criterion(m1, criterion = c("loo", "waic"))
 m2 <- add_criterion(m2, criterion = c("loo", "waic"))
 
+# Comparing loo scores
 loo_compare(m1, m2)
 
 
 loo(m1, m2)
 
-
+# stacking weights
 loo_model_weights(m1, m2) # m2 is best
 
-mcmc_plot(m1)
-mcmc_plot(m2)
+
+
 ```
 Check and evaluate the models
 ```{r}
@@ -375,7 +369,6 @@ mcmc_plot(m2)
 
 hypothesis(m2, "motime_pre > 0", class = "bsp")
 
-inv_logit(0.32)
 
 
 #Posterior update check
@@ -383,11 +376,12 @@ plot(hypothesis(m2, "motime_pre > 0", class = "bsp"))
 
 
 
-# Plotting the conditional effects
+# Plotting the conditional effects of time_lock
 plot(conditional_effects(m2, categorical = T, 
                          method="posterior_epred", 
                          nsamples=100), 
      points=T)
+
 
 
 ```
@@ -399,7 +393,7 @@ Next hypothesis
 ```{r}
 
 
-
+# making variables into intergers
 df$social_workout_lock <- as.integer(df$social_workout_lock)
 df$social_workout_pre <- as.integer(df$social_workout_pre)
 
@@ -413,7 +407,7 @@ m3_f <- bf(social_workout_lock~1)
 get_prior(m3_f, family = cumulative("logit"), data = df)
 summary(df$social_workout_lock)
 
-
+# setting priors
 f3_prior <- c(
   prior(normal(0, 1), class = Intercept, coef = 1),
   prior(normal(0, 1), class = Intercept, coef = 2),
@@ -422,7 +416,7 @@ f3_prior <- c(
 )
 
 
-# Prior Predictive Check (and adjustments)
+# Prior Predictive Check 
 m3_priorCheck <- brm(
   m3_f,
   data = df,
@@ -482,7 +476,6 @@ m4_f <- bf(social_workout_lock~1+mo(social_workout_pre))
 get_prior(m4_f, family = cumulative("logit"), data = df)
 
 
-summary(df$social_workout_lock)
 
 # setting the priors
 f4_prior <- c(
@@ -493,13 +486,6 @@ f4_prior <- c(
   prior(normal(0,0.2), class = b, coef = mosocial_workout_pre),
   prior(dirichlet(1, 1, 1, 1), class = "simo", coef = "mosocial_workout_pre1")
 )
-
-
-
-# Illustrate outcome variable 
-dens <- density(df$social_workout_lock)
-plot(dens)
-
 
 
 # Prior Predictive Check (and adjustments)
@@ -540,13 +526,18 @@ pp_check(m4, nsamples = 100)
 summary(m4)
 
 
+#extract the posteriors from the model: 
+
+post_p4 <- posterior_samples(m4)
+
+#How much have the posterior betas learned from data, compared to priors - density plots of prior vs posterior distributions
+
+# 
+ggplot(post_p4) + geom_density(aes(post_p4$'prior_b', fill = "prior_bsp_mosocial_workout_pre")) + geom_density(aes(post_p4$'bsp_mosocial_workout_pre', fill = "posterior")) + xlab("Parameter values")
+
 
 # inv_logit of estimate for mosocial_workout_log
 inv_logit(0.26)
-
-posterior_m4 <- posterior_samples(m4)
-con_m4 <- conditional_effects(m4)
-
 
 
 
@@ -554,8 +545,11 @@ con_m4 <- conditional_effects(m4)
 m3 <- add_criterion(m3, criterion = c("loo", "waic"))
 m4 <- add_criterion(m4, criterion = c("loo", "waic"))
 
+# comparing loo scores
 loo_compare(m3, m4) # m4 is best
 
+
+#stacking weights
 loo_model_weights(m3, m4) # m4 is best
 
 ```
@@ -583,10 +577,13 @@ inv_logit(0.26)
 #Posterior update check
 plot(hypothesis(m4, "mosocial_workout_pre > 0", class = "bsp"))
 
-# Plotting the conditional effects
+# Plotting the conditional effects of social_workout_lock
 plot(conditional_effects(m4, categorical = T, 
                          method="posterior_epred", 
                          nsamples=100), 
      points=T)
 
 ```
+
+
+
